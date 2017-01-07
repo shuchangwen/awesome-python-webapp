@@ -11,7 +11,9 @@ awesome-python-webapp/   <-- 根目录
 |
 +- dist/                 <-- 打包目录
 |
-+- www/                  <-- Web目录，存放.py文件
++- test/                 <-- 测试文件
+|
++- www/                  <-- Web目录，存放.py文件
 |  |
 |  +- static/            <-- 存放静态文件
 |  |
