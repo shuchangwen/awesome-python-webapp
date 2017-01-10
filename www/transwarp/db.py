@@ -99,7 +99,7 @@ def with_transaction(func):
 def _select(sql, first, *args):
     """
     执行SQL, 返回一个结果或者多个结果组成的列表
-    :param sql: 
+    :param sql:
     :param first:
     :param args:
     :return:
@@ -140,7 +140,7 @@ def select_int(sql, *args):
     :return:
     """
     d = _select(sql, True, *args)
-    if len(d) != 1:
+    if len(d) != 1:#TODO d可能为None的异常处理
         raise MultiColumnsError('Expect only one column.')
     return d.values()[0]
 
@@ -388,8 +388,8 @@ class _TransactionCtx(object):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     create_engine('www-data', 'www-data', 'test')
-    update('drop table if exists user')
-    update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
+    update('drop table if exists user_new')
+    update('create table user_new (id int primary key, name text, email text, passwd text, last_modified real)')
     import doctest
     doctest.testmod()
 
