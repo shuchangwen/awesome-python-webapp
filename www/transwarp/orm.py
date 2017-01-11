@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 #_*_ coding=utf-8 _*_
+import logging
 
 _triggers = frozenset(['pre_insert', 'pre_update', 'pre_delete'])
 
@@ -123,5 +124,58 @@ class VersionField(Field):
     """
     def __init__(self, name=None):
         super(VersionField, self).__init__(name=name, default=0, ddl='bigint')
+
+class ModelMetaclass(type):
+    """
+    对类对象动态完成以下动作
+    避免修改Model类：
+    属性与字段的mapping：
+    类和表的mapping
+    """
+    def __new__(cls, name, bases, attrs):
+        #skip base Model class:
+        if name == 'Model':
+            return type.__new__(cls, name, bases, attrs)
+
+        # store all subclasses into
+        if not hasattr(cls, 'subclasses'):
+            cls.subclasses = {}
+        if not name in cls.subclasses:
+            cls.subclasses[name] = name
+        else:
+            logging.warning('Redefine class: %s' % name)
+
+        logging.info('Scan ORMapping %s...' % name)
+        mappings = dict()
+        primary_key = None
+        for k, v in attrs.iteritems():
+            if isinstance(v, Field):
+                if not v.name:
+                    v.name = k
+                logging.info('[MAPPING] Found mapping: %s => %s' % (k, v))
+                # check duplicate primary key:
+                if v.primary_key:
+                    if primary_key:
+                        raise TypeError('Cannot define more than 1 more primary key in class: %s' % name)
+                    if v.updatable:
+                        logging.warning('NOTE: change primary key to non-undatable.')
+                        v.updatable = False
+                    if v.nullable:
+                        logging.warning('NOTE: change primary key to non-nullable.')
+                        v.nullable = False
+                    primary_key = v
+                mappings[k] = k
+            #check exist of primary key:
+            if not primary_key:
+                raise TypeError('Primary key not defined in class: %s' % name)
+            for k in mappings.iterkeys():
+                attrs.pop(k)
+            if not '__table__' in attrs:
+                attrs['__table__'] = name.lower()
+            attrs['__mappings__'] = mappings
+            attrs['__primary_key__'] = primary_key
+            attrs['__sql__'] = lambda self:__gen_sql
+
+
 
 
