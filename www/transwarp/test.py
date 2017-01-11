@@ -15,6 +15,6 @@ print u.name
 print select_int('select count(*) from user')
 print select_int('select count(*) from user where email=?', 'alice@test.org')
 print select_int('select count(*) from user where email=?', 'notexist@test.org')
-print select_int('select id, name from user where email=?', 'alice@test.org')
+print select_int('select id, name from user where email=?', 'scw@test.org')
 
 

@@ -140,8 +140,10 @@ def select_int(sql, *args):
     :return:
     """
     d = _select(sql, True, *args)
-    if len(d) != 1:#TODO d可能为None的异常处理
-        raise MultiColumnsError('Expect only one column.')
+    if d == None:
+        raise StandardError('Result is None')
+        if len(d) != 1:
+            raise MultiColumnsError('Expect only one column.')
     return d.values()[0]
 
 def select(sql, *args):
