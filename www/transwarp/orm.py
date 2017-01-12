@@ -57,20 +57,31 @@ class Field(object):
         返回实例对象的描述信息
         :return:
         """
-        s = ['<%s:%s, default(%s), ' % (self.__class__.__name__, self.name, self.ddl, self._default)]
+        s = ['<%s:%s,%s, default(%s), ' % (self.__class__.__name__, self.name, self.ddl, self._default)]
         self.nullable and s.append('N')
         self.updatable and s.append('U')
         self.insertable and s.append('I')
         s.append('>')
         return ''.join(s)
 
+class StringField(Field):
+    """
+    保存String类型字段的属性
+    """
+    def __init__(self, **kw):
+        if 'default' not in kw:
+            kw['default'] = ''
+        if 'ddl' not in kw:
+            kw['ddl'] = 'varchar(255)'
+        super(StringField, self).__init__(**kw)
+	
 class IntegerField(Field):
     """
     保存Integer类型字段的属性
     """
     def __init__(self, **kw):
         if 'default' not in kw:
-            kw['defualt'] = 0
+            kw['default'] = 0
         if 'ddl' not in kw:
             kw['ddl'] = 'bigint'
         super(IntegerField, self).__init__(**kw)
@@ -79,11 +90,11 @@ class FloatField(Field):
     """
     保存Float类型字段的属性
     """
-    def __int__(self, **kw):
+    def __init__(self, **kw):
         if 'default' not in kw:
             kw['default'] = 0.0
         if 'ddl' not in kw:
-            kw['ddl'] = 'bool'
+            kw['ddl'] = 'real'
         super(FloatField, self).__init__(**kw)
 
 class BooleanField(Field):
@@ -97,27 +108,27 @@ class BooleanField(Field):
             kw['ddl'] = 'bool'
         super(BooleanField, self).__init__(**kw)
 
-class TextFiled(Field):
+class TextField(Field):
     """
     保存Text类型字段的属性
     """
-    def __init__(self):
+    def __init__(self, **kw):
         if 'default' not in kw:
             kw['default'] = ''
         if 'ddl' not in kw:
             kw['ddl'] = 'text'
-        super(TextFiled, self).__init__(**kw)
+        super(TextField, self).__init__(**kw)
 
 class BlobField(Field):
     """
-    宝不能Blob类型字段的属性
+    保存Blob类型字段的属性
     """
     def __init__(self, **kw):
         if 'default' not in kw:
             kw['default'] = ''
         if 'ddl' not in kw:
             kw['ddl'] = 'blob'
-        super(BlobField, self).__init__()
+        super(BlobField, self).__init__(**kw)
 
 class VersionField(Field):
     """
@@ -128,7 +139,7 @@ class VersionField(Field):
 
 class ModelMetaclass(type):
     """
-    对类对象动态完成以下动作
+    对类对象动态完成以下操作
     避免修改Model类：
     属性与字段的mapping：
     类和表的mapping
@@ -138,7 +149,7 @@ class ModelMetaclass(type):
         if name == 'Model':
             return type.__new__(cls, name, bases, attrs)
 
-        # store all subclasses into
+        # store all subclasses info
         if not hasattr(cls, 'subclasses'):
             cls.subclasses = {}
         if not name in cls.subclasses:
@@ -157,34 +168,34 @@ class ModelMetaclass(type):
                 # check duplicate primary key:
                 if v.primary_key:
                     if primary_key:
-                        raise TypeError('Cannot define more than 1 more primary key in class: %s' % name)
+                        raise TypeError('Cannot define more than 1 primary key in class: %s' % name)
                     if v.updatable:
-                        logging.warning('NOTE: change primary key to non-undatable.')
+                        logging.warning('NOTE: change primary key to non-updatable.')
                         v.updatable = False
                     if v.nullable:
                         logging.warning('NOTE: change primary key to non-nullable.')
                         v.nullable = False
                     primary_key = v
-                mappings[k] = k
-            #check exist of primary key:
-            if not primary_key:
-                raise TypeError('Primary key not defined in class: %s' % name)
-            for k in mappings.iterkeys():
-                attrs.pop(k)
-            if not '__table__' in attrs:
-                attrs['__table__'] = name.lower()
-            attrs['__mappings__'] = mappings
-            attrs['__primary_key__'] = primary_key
-            attrs['__sql__'] = lambda self:_gen_sql(attrs['__table__'], mappings)
-            for trigger in _triggers:
-                if not trigger in attrs:
-                    attrs[trigger] = None
-            return type.__new__(cls, name, bases, attrs)
+                mappings[k] = v
+        #check exist of primary key:
+        if not primary_key:
+            raise TypeError('Primary key not defined in class: %s' % name)
+        for k in mappings.iterkeys():
+            attrs.pop(k)
+        if not '__table__' in attrs:
+            attrs['__table__'] = name.lower()
+        attrs['__mappings__'] = mappings
+        attrs['__primary_key__'] = primary_key
+        attrs['__sql__'] = lambda self:_gen_sql(attrs['__table__'], mappings)
+        for trigger in _triggers:
+            if not trigger in attrs:
+                attrs[trigger] = None
+        return type.__new__(cls, name, bases, attrs)
 
 class Model(dict):
     """
     基类，用户在子类中 定义映射关系，因此我们需要动态扫描子类属性，
-    从中抽取出了属性， 完成类 <==>表的映射，这里使用metaclass来实现。
+    从中抽取出类属性， 完成类 <==>表 的映射，这里使用metaclass来实现。
     最后将扫描出来的结果保存在类属性
         "__table__" : 表名
         "__mappings__": 字段对象（字段的所有属性，见Field类）
@@ -209,7 +220,7 @@ class Model(dict):
 
     def __setattr__(self, key, value):
         """
-        set时生效， 比如a[key]=value, a={'key1':'value1', 'key2':'value2'}
+        set时生效， 比如a[key] = value, a = {'key1':value1, 'key2':value2}
         set时添加属性
         :param key:
         :param value:
@@ -266,7 +277,7 @@ class Model(dict):
         执行select count(pk) from table语句，返回一个数值
         :return:
         """
-        return db.select('select count(`%s`) from `%s`' % (cls.__primary_key__.nae, cls.__table__))
+        return db.select('select count(`%s`) from `%s`' % (cls.__primary_key__.name, cls.__table__))
 
     @classmethod
     def count_by(cls, where, *args):
@@ -302,7 +313,7 @@ class Model(dict):
                 args.append(arg)
         pk = self.__primary_key__.name
         args.append(getattr(self, pk))
-        db.update('updte `%s` set %s where %s=?' % (self.__table__, ','.join(L), pk), *args)
+        db.update('update `%s` set %s where %s=?' % (self.__table__, ','.join(L), pk), *args)
         return self
 
     def delete(self):
@@ -313,7 +324,7 @@ class Model(dict):
         self.pre_delete and self.pre_delete()
         pk = self.__primary_key__.name
         args = (getattr(self, pk), )
-        db.update('delete from `%s`=?' % (self.__table__, pk), *args)
+        db.update('delete from `%s` where `%s`=?' % (self.__table__, pk), *args)
         return self
 
     def insert(self):
@@ -332,7 +343,7 @@ class Model(dict):
         return self
 
 if __name__ == '__main__':
-    logging.basicConfg(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
     db.create_engine('www-data', 'www-data', 'test')
     db.update('drop table if exists user')
     db.update('create table user (id int primary key, name text, email text, passwd text, last_modified real)')
