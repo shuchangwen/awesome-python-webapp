@@ -34,15 +34,66 @@ except ImportError:
 #######################################################
 ctx = threading.local()
 
-_RE_RESPONSE_STATUS = re.compile(r'^\d\d(\[\w\]+)?$')
-_HEADER_X_POWERED_BY = ('X-Powered-By', 'transwarp/1.0')
 
 # 用于时区转换
-_TIMEDLTA_ZERO = datetime.timedelta(0)
+_TIMEDELTA_ZERO = datetime.timedelta(0)
 _RE_TZ = re.compile('^([\+\-])([0-9]{1,2})\:([0-9]{1,2})$')
 
-#response status
-_RE_RESPONSE_STATUS = {
+class UTC(datetime.tzinfo):
+    """
+    tzinfo是一个基类，用于给datetime对象分配一个时区
+    使用方式是把这个子类对象传递给datetime.tzinfo属性
+    传递方法有2种：
+        1.初始化的时候传入
+        datetime(2000, 2, 17, 19, 10, 2, tzinfo=tz0)
+        2.使用datetime对象的replace方法传入，从新生成一个datetime对象
+        datetime.replace(tzinfo=tz0）
+    """
+    def __init__(self, utc):
+        utc = str(utc.strip().upper())
+        mt = _RE_TZ.match(utc)
+        if mt:
+            minus = mt.group(1)=='-'
+            h = int(mt.group(2))
+            m = int(mt.group(3))
+            if minus:
+                h, m = (-h), (-m)
+            self._utcoffset = datetime.timedelta(hours=h, minutes=m)
+            self._tzname = 'UTC%s' % utc
+        else:
+            raise ValueError('bad utc time zone')
+
+    def utcoffset(self, dt):
+        """
+        表示与标准时区的偏移量
+        :param dt:
+        :return:
+        """
+        return self._utcoffset
+
+    def dst(self, dt):
+        """
+        Daylight Saving Time夏令时
+        :param dt:
+        :return:
+        """
+        return _TIMEDELTA_ZERO
+
+    def tzname(self, dt):
+        """
+        所在时区的名字
+        :param dt:
+        :return:
+        """
+        return self._tzname
+
+    def __str__(self):
+        return 'UTC tzinfo object (%s)' % self._tzname
+
+    __repr__ = __str__
+
+# all known response statues
+_RESPONSE_STATUSES = {
     # Informational
     100: 'Continue',
     101: 'Switching Protocols',
@@ -59,7 +110,15 @@ _RE_RESPONSE_STATUS = {
     207: 'Multi Status',
     226: 'IM Used',
 
-# Client Error
+    # Redirection
+	300: 'Multiple Choices',
+	301: 'Moved Permanently',
+	302: 'Found',
+	303: 'See Other',
+	304: 'Not Modified',
+	305: 'Use Proxy',
+	307: 'Temporary Redirect',
+    # Client Error
     400: 'Bad Request',
     401: 'Unauthorized',
     402: 'Payment Required',
@@ -95,13 +154,15 @@ _RE_RESPONSE_STATUS = {
     510: 'Not Extended',
 }
 
+_RE_RESPONSE_STATUS = re.compile(r'^\d\d(\[\w\]+)?$')
+
 _RESPONSE_HEADERS = (
     'Accept-Ranges',
     'Age',
     'Allow',
     'Cache-Control',
     'Connection',
-'Content-Encoding',
+    'Content-Encoding',
     'Content-Language',
     'Content-Length',
     'Content-Location',
@@ -139,59 +200,7 @@ _RESPONSE_HEADERS = (
 
 _RESPONSE_HEADER_DICT = dict(zip(map(lambda  x: x.upper(), _RESPONSE_HEADERS), _RESPONSE_HEADERS))
 
-class UTC(datetime.tzinfo):
-    """
-    tzinfo是一个基类，用于给datetime对象分配一个时区
-    使用方式是把这个子类对象传递给datetime.tzinfo属性
-    传递方法有2种：
-        1.初始化的时候传入
-        datetime(2000, 2, 17, 19, 10, 2, tzinfo=tz0)
-        2.使用datetime对象的replace方法传入，从新生成一个datetime对象
-        datetime.replace(tzinfo=tz0）
-    """
-    def __init__(self, utc):
-        utc = str(utc.strip().upper())
-        mt = _RE_TZ.match(utc)
-        if mt:
-            minus = mt.group(1) == '-'
-            h = int(mt.group(2))
-            m = int(mt.group(3))
-            if minus:
-                h, m = (-h), (-m)
-                self._utcoffset = datetime.timedelta(hours=h, minutes=m)
-                self._tzname = 'UTC%s' % utc
-            else:
-                raise ValueError('bad utc time zone')
-
-    def utcoffset(self, dt):
-        """
-        表示与标准时区的偏移量
-        :param dt:
-        :return:
-        """
-        return self._utcoffset
-
-    def dst(self, dt):
-        """
-        Daylight Saving Time夏令时
-        :param dt:
-        :return:
-        """
-        return _TIMEDLTA_ZERO
-
-    def dzname(self, dt):
-        """
-        所在时区的名字
-        :param dt:
-        :return:
-        """
-        return self._tzname
-
-    def __str__(self):
-        return 'UTC timezone info object (%s)' % self._tzname
-
-    __repr__ = __str__
-
+_HEADER_X_POWERED_BY = ('X-Powered-By', 'transwarp/1.0')
 
 #用于异常处理
 class HttpError(Exception):
@@ -213,7 +222,7 @@ class HttpError(Exception):
         :param value:
         :return:
         """
-        if not self._headers:
+        if not hasattr(self, '_headers'):
             self._headers = [_HEADER_X_POWERED_BY]
         self._headers.append((name, value))
 
@@ -316,7 +325,7 @@ def seeother(location):
 
 def _to_str(s):
     '''
-    convert to str.
+    Convert to str.
     :param s:
     :return:
     '''
@@ -326,7 +335,7 @@ def _to_str(s):
         return s.encode('utf-8')
     return str(s)
 
-def _to_unicode(s, encodeing='utf-8'):
+def _to_unicode(s, encoding='utf-8'):
     '''
     Convert to unicode.
     :param s:
@@ -381,7 +390,7 @@ def post(path):
 
 _re_route = re.compile(r'(\:[a-zA-Z_]\w*)')
 
-def _build_regx(path):
+def _build_regex(path):
     '''
     Convert route path to regex.
     :param path:
@@ -420,7 +429,7 @@ class Route(object):
         self.method = func.__web_method__
         self.is_static = _re_route.search(self.path) is None
         if not self.is_static:
-            self.route = re.compile(_build_regx(self.path))
+            self.route = re.compile(_build_regex(self.path))
         self.func = func
 
     def match(self, url):
@@ -454,7 +463,7 @@ class StaticFileRoute(object):
         self.route = re.compile('^/static/(.+)$')
 
     def match(self, url):
-        if url.startwith('/static/'):
+        if url.startswith('/static/'):
             return (url[1:], )
         return None
 
@@ -463,15 +472,16 @@ class StaticFileRoute(object):
         if not os.path.isfile(fpath):
             raise notfound()
         fext = os.path.splitext(fpath)[1]
-        ctx.response.content_type = mimetypes.types_map.get(fext.lower(), 'application/octet-stram')
+        ctx.response.content_type = mimetypes.types_map.get(fext.lower(), 'application/octet-stream')
         return _static_file_generator(fpath)
-
+'''
 def favicon_handler():
     return static_file_handler('/favicon.ico')
+'''
 
 class MultipartFile(object):
     '''
-    Multipart file storage get from request input
+    Multipart file storage get from request input.
     '''
     def __init__(self, storage):
         self.filename = _to_unicode(storage.filename)
@@ -519,8 +529,8 @@ class Request(object):
 
     def __getitem__(self, key):
         '''
-        Get input parameter value. If the specified key has multiple value, the first one is returned
-        If the specified key is not exists, then raise keyError
+        Get input parameter value. If the specified key has multiple value, the first one is returned.
+        If the specified key is not exist, then raise KeyError.
         :param key:
         :return:
         '''
@@ -561,7 +571,7 @@ class Request(object):
         '''
         copy = Dict(**kw)
         raw = self._get_raw_input()
-        for k, v in raw.items():
+        for k, v in raw.iteritems():
             copy[k] = v[0] if isinstance(v, list) else v
         return copy
 
@@ -589,6 +599,7 @@ class Request(object):
         '''
         return self._environ.get('QUERY_STRING', '')
 
+    @property
     def environ(self):
         '''
         Get raw environ as dict, both key, value are str.
@@ -605,6 +616,14 @@ class Request(object):
         return self._environ['REQUEST_METHOD']
 
     @property
+    def path_info(self):
+        '''
+        Get request path as str
+        :return:
+        '''
+        return urllib.unquote(self._environ.get('PATH_INFO', ''))
+
+    @property
     def host(self):
         '''
         Get request host as str. Default to '' if cannot get host..
@@ -617,6 +636,7 @@ class Request(object):
             hdrs = {}
             for k, v in self._environ.iteritems():
                 if k.startswith('HTTP_'):
+                    # convert 'HTTP_ACCEPT_ENCODING' to 'ACCEPT-ENCODING'
                     hdrs[k[5:].replace('_', '-').upper()] = v.decode('utf-8')
             self._headers = hdrs
         return self._headers
@@ -632,7 +652,7 @@ class Request(object):
     def header(self, header, default=None):
         '''
         Get header from request as unicode, return None if not exist, or default if specified.
-        The header name is case-insensitive such as 'USER-AGENT' or u'content-type.
+        The header name is case-insensitive such as 'USER-AGENT' or u'content-Type'.
         :param header:
         :param default:
         :return:
@@ -741,7 +761,7 @@ class Response(object):
         :return:
         """
         if value:
-           self.set_header('CONTENT-TYPE', value)
+            self.set_header('CONTENT-TYPE', value)
         else:
             self.unset_header('CONTENT-TYPE')
 
@@ -800,7 +820,7 @@ class Response(object):
             L.append('Secure')
         if http_only:
             L.append('HttpOnly')
-        self._cookies[name]=';'.join(L)
+        self._cookies[name]='; '.join(L)
 
     def unset_cookie(self, name):
         if hasattr(self, '_cookies'):
@@ -827,7 +847,7 @@ class Response(object):
     def status(self, value):
         if isinstance(value, (int, long)):
             if value >= 100 and value <= 999:
-                st = _RE_RESPONSE_STATUS.get(value, '')
+                st = _RESPONSE_STATUSES.get(value, '')
                 if st:
                     self._status = '%d %s' % (value, st)
                 else:
@@ -840,7 +860,7 @@ class Response(object):
             if _RE_RESPONSE_STATUS.match(value):
                 self._status = value
             else:
-                raise ValueError('Bad response code: %d' % value)
+                raise ValueError('Bad response code: %s' % value)
         else:
             raise TypeError('Bad type of response code.')
 
@@ -879,7 +899,7 @@ class Jinja2TemplateEngine(TemplateEngine):
 
 def _default_error_handler(e, start_response, is_debug):
     if isinstance(e, HttpError):
-        logging.info('HttpErro:%s' % e.status)
+        logging.info('HttpError: %s' % e.status)
         headers = e.headers[:]
         headers.append(('Content-Type', 'text/html'))
         start_response(e.status, headers)
@@ -888,7 +908,7 @@ def _default_error_handler(e, start_response, is_debug):
     start_response('500 Internal Server Error', [('Content-Type', 'text/html'), _HEADER_X_POWERED_BY])
     if is_debug:
         return _debug()
-    return ('<html><body><h1>500 Internal Server Error</h1></body></html>')
+    return ('<html><body><h1>500 Internal Server Error</h1><h3>%s</h3></body></html>' % str(e))
 
 def view(path):
     '''
@@ -903,7 +923,7 @@ def view(path):
             if isinstance(r, dict):
                 logging.info('return Template')
                 return Template(path, **r)
-            raise ValueError('Except return a dict when using @view() decorator.')
+            raise ValueError('Expect return a dict when using @view() decorator.')
         return _wrapper
     return _decorator
 
@@ -911,10 +931,10 @@ _RE_INTERCEPTROR_STARTS_WITH = re.compile(r'^([^\*\?]+)\*?$')
 _RE_INTERCEPTROR_ENDS_WITH = re.compile(r'^\*([^\*\?]+)$')
 
 def _build_pattern_fn(pattern):
-    m = _RE_INTERCEPTROR_ENDS_WITH.match(pattern)
+    m = _RE_INTERCEPTROR_STARTS_WITH.match(pattern)
     if m:
         return lambda p: p.startswith(m.group(1))
-    m = _RE_INTERCEPTROR_ENDS_WITH.math(pattern)
+    m = _RE_INTERCEPTROR_ENDS_WITH.match(pattern)
     if m:
         return lambda p: p.endswith(m.group(1))
     raise ValueError('Invalid pattern definition in interceptor.')
@@ -1036,7 +1056,7 @@ class WSGIApplication(object):
 
     def run(self, port=9000, host='127.0.0.1'):
         from wsgiref.simple_server import make_server
-        logging.info('application (%s) will start at %s:%s...' % (self._documetn_root, host, port))
+        logging.info('application (%s) will start at %s:%s...' % (self._document_root, host, port))
         server = make_server(host, port, self.get_wsgi_application(debug=True))
         server.serve_forever()
 
@@ -1075,14 +1095,14 @@ class WSGIApplication(object):
                 raise notfound()
             raise badrequest()
 
-        fn_route = _build_interceptor_chain(fn_route, *self._interceptors)
+        fn_exec = _build_interceptor_chain(fn_route, *self._interceptors)
 
         def wsgi(env, start_response):
             ctx.application = _application
             ctx.request = Request(env)
             response = ctx.response = Response()
             try:
-                f = fn_exec()
+                r = fn_exec()
                 if isinstance(r, Template):
                     r = self._template_engine(r.template_name, r.model)
                 if isinstance(r, unicode):
@@ -1102,15 +1122,16 @@ class WSGIApplication(object):
                 logging.exception(e)
                 if not debug:
                     start_response('500 Internal Server Error', [])
-                    return ('<html><body><h1>500 Internal Server Error</h1></body></html>')
-                exc_type, exc_value, exc_traceback = sys.exec_info()
+                    return ['<html><body><h1>500 Internal Server Error</h1></body></html>']
+                exc_type, exc_value, exc_traceback = sys.exc_info()
                 fp = StringIO()
                 traceback.print_exception(exc_type, exc_value, exc_traceback, file=fp)
                 stacks = fp.getvalue()
+                fp.close()
                 start_response('500 Internal Server Error', [])
                 return [
-                    r ''<html><body><h1>500 Internal Server Error<h1><div style="font-family:Manaco, Menlo, Consolas, 'Courier New', monos
-                    stacks.replace('<', '&lt;').replace('>', '&glt;'),
+                    r'''<html><body><h1>500 Internal Server Error</h1><div style="font-family:Monaco, Menlo, Consolas, 'Courier New', monospace;"><pre>''',
+                    stacks.replace('<', '&lt;').replace('>', '&gt;'),
                     '</pre></div></body></html>']
             finally:
                 del ctx.application
