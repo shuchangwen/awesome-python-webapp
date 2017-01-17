@@ -3,8 +3,9 @@
 
 import os, re, time, base64, hashlib, logging
 
-from transwarp.web import get, post, ctx, view, interceptor, seeother, notfound
 import markdown2
+from transwarp.web import get, post, ctx, view, interceptor, seeother, notfound
+
 from apis import api, Page, APIError, APIValueError, APIPermissionError, APIResourceNotFoundError
 from models import User, Blog, Comment
 from config import configs
@@ -22,7 +23,7 @@ def _get_page_index():
 
 def make_signed_cookie(id, password, max_age):
     expires = str(int(time.time() + (max_age or 86400)))
-    L = [id, expires, hashlib.md5('%s-%s-%s-%s' %s (id, password, expires, _COOKIE_KEY)).hexdigest()]
+    L = [id, expires, hashlib.md5('%s-%s-%s-%s' % (id, password, expires, _COOKIE_KEY)).hexdigest()]
     return '-'.join(L)
 
 def parse_signed_cookie(cookie_str):
@@ -36,7 +37,7 @@ def parse_signed_cookie(cookie_str):
         user = User.get(id)
         if user is None:
             return None
-        if md5 != hashlib.md5('%s-%s-%s-%s' %s (id, user.password, expires, _COOKIE_KEY)).hexdigest():
+        if md5 != hashlib.md5('%s-%s-%s-%s' % (id, user.password, expires, _COOKIE_KEY)).hexdigest():
             return None
         return user
     except:
@@ -82,7 +83,7 @@ def blog(blog_id):
         raise notfound()
     blog.html_content = markdown2.markdown(blog.content)
     comments = Comment.find_by('where blog_id=? order by created_at desc limit 1000', blog_id)
-    return dict(blog=blog, commens=comments, user=ctx.request.user)
+    return dict(blog=blog, comments=comments, user=ctx.request.user)
 
 @view('signin.html')
 @get('/signin')
@@ -114,7 +115,7 @@ def authenticate():
     user.password = '******'
     return user
 
-_RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$]')
+_RE_EMAIL = re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$')
 _RE_MD5 = re.compile(r'^[0-9a-f]{32}$')
 
 @api
@@ -122,7 +123,7 @@ _RE_MD5 = re.compile(r'^[0-9a-f]{32}$')
 def register_user():
     i = ctx.request.input(name='', email='', password='')
     name = i.name.strip()
-    email = i.email.strip.lower()
+    email = i.email.strip().lower()
     password = i.password
     if not name:
         raise APIValueError('name')
@@ -133,7 +134,7 @@ def register_user():
     user = User.find_first('where email=?', email)
     if user:
         raise APIError('register:failed', 'email', 'Email is already in use.')
-    user = User(name=name, email=email, password=password, image='http://www.gravatar.com/avatar/$s?d=mm&s=120' % hashlib.md5(email).hexdigest())
+    user = User(name=name, email=email, password=password, image='http://www.gravatar.com/avatar/%s?d=mm&s=120' % hashlib.md5(email).hexdigest())
     user.insert()
     #make session cookie:
     cookie = make_signed_cookie(user.id, user.password, None)
@@ -160,9 +161,13 @@ def manage_index():
 def manage_comments():
     return dict(page_index=_get_page_index(), user=ctx.request.user)
 
-@view('manage_blog_edit.html')
-@get('manage/blogs')
+@view('manage_blog_list.html')
+@get('/manage/blogs')
 def manage_blogs():
+    return dict(page_index=_get_page_index(), user=ctx.request.user)
+@view('manage_blog_edit.html')
+@get('/manage/blogs/create')
+def manage_blogs_create():
     return dict(id=None, action='/api/blogs', redirect='/manage/blogs', user=ctx.request.user)
 
 @view('manage_blog_edit.html')
@@ -172,6 +177,10 @@ def manage_blogs_edit(blog_id):
     if blog is None:
         raise notfound()
     return dict(id=blog.id, name=blog.name, summary=blog.summary, content=blog.content, action='/api/blogs/%s' % blog_id, redirect='/manage/blogs', user=ctx.request.user)
+@view('manage_user_list.html')
+@get('/manage/users')
+def manage_users():
+    return dict(page_index=_get_page_index(), user=ctx.request.user)
 
 @api
 @get('/api/blogs')
@@ -274,7 +283,7 @@ def api_delete_comment(comment_id):
 def api_get_comments():
     total = Comment.count_all()
     page = Page(total, _get_page_index())
-    comments =Comment.find_by('order by created_at desc limit ?, ?', page.offset, page.limit)
+    comments =Comment.find_by('order by created_at desc limit ?,?', page.offset, page.limit)
     return dict(comments=comments, page=page)
 
 @api

@@ -111,13 +111,13 @@ _RESPONSE_STATUSES = {
     226: 'IM Used',
 
     # Redirection
-	300: 'Multiple Choices',
-	301: 'Moved Permanently',
-	302: 'Found',
-	303: 'See Other',
-	304: 'Not Modified',
-	305: 'Use Proxy',
-	307: 'Temporary Redirect',
+    300: 'Multiple Choices',
+    301: 'Moved Permanently',
+    302: 'Found',
+    303: 'See Other',
+    304: 'Not Modified',
+    305: 'Use Proxy',
+    307: 'Temporary Redirect',
     # Client Error
     400: 'Bad Request',
     401: 'Unauthorized',
@@ -154,7 +154,7 @@ _RESPONSE_STATUSES = {
     510: 'Not Extended',
 }
 
-_RE_RESPONSE_STATUS = re.compile(r'^\d\d(\[\w\]+)?$')
+_RE_RESPONSE_STATUS = re.compile(r'^\d\d\d(\ [\w\ ]+)?$')
 
 _RESPONSE_HEADERS = (
     'Accept-Ranges',
@@ -780,7 +780,7 @@ class Response(object):
         :param value:
         :return:
         '''
-        self.set_header('CONTENT-TYPE', str(value))
+        self.set_header('CONTENT-LENGTH', str(value))
 
     def delete_cookie(self, name):
         '''
@@ -974,7 +974,7 @@ def _build_interceptor_chain(last_fn, *interceptors):
 
 def _load_module(module_name):
     '''
-    Load module from name str.
+    Load module from name as str.
     :param module_name:
     :return:
     '''
@@ -1001,7 +1001,7 @@ class WSGIApplication(object):
         :param kw:
         '''
         self._running = False
-        self_document_root = document_root
+        self._document_root = document_root
 
         self._interceptors = []
         self._template_engine = None
@@ -1087,7 +1087,7 @@ class WSGIApplication(object):
             if request_method == 'POST':
                 fn = self._post_static.get(path_info, None)
                 if fn:
-                    return fn
+                    return fn()
                 for fn in self._post_dynamic:
                     args = fn.match(path_info)
                     if args:
