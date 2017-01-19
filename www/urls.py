@@ -74,11 +74,20 @@ def manage_interceptor(next):
 # def index():
 #     blogs, page = _get_blogs_by_page()
 #     return dict(page=page, blogs=blogs, user=ctx.request.user)
-@view('test_users.html')
+
+# @view('test_users.html')
+# @get('/')
+# def test_users():
+#     users = User.find_all()
+#     return dict(users=users)
+
+@view('blogs.html')
 @get('/')
-def test_users():
-    users = User.find_all()
-    return dict(users=users)
+def index():
+    blogs = Blog.find_all()
+    #查找登录用户
+    user = User.find_first('where email=?', 'admin@example.com')
+    return dict(blogs=blogs, user=user)
 
 @view('blog.html')
 @get('/blog/:blog_id')
